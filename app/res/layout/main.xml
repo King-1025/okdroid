@@ -4,16 +4,23 @@
     android:layout_width="fill_parent"
     android:layout_height="fill_parent"
     android:gravity="center">
-<TextView
-    android:layout_width="fill_parent"
-    android:layout_height="wrap_content"
-    android:text="Hello World, ACTIVITY_ENTRY_NAME"
+    <EditText
+	android:id="@+id/input"
+	android:ems="10"
+	android:hint="@string/input_text"
+	android:textSize="15sp"
+	android:textColor="#000000"
+	android:singleLine="true"
+	android:layout_width="300dp"
+	android:layout_height="wrap_content"
+	android:layout_marginBottom="30dp"
     />
-<Button
-    android:id="@+id/show"
-    android:layout_width="wrap_content"
-    android:layout_height="wrap_content"
-    android:text="@string/show_button_text"
+
+    <Button
+    	android:id="@+id/show"
+    	android:layout_width="wrap_content"
+    	android:layout_height="wrap_content"
+	android:text="@string/show_button_text"
     />
 </LinearLayout>
 

@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">okdroid</string>
-    <string name="show_button_text">获取本地消息</string>
+	<string name="app_name">okdroid</string>
+	<string name="input_text">输入命令</string>
+	<string name="show_button_text">获取本地消息</string>
 </resources>

@@ -32,7 +32,7 @@ support_tools=tools
 default_apk_name=signed-debug.apk
 default_sign_jks=${android_debug_jks}
 
-android_jar=./tools/lib/android-28.jar
+android_jar=$KALI_HOME/opt/android-sdk-linux/platforms/android-28/android.jar
 jni_list="./jni.list"
 
 java_compile_options="-cp ${android_jar}"
@@ -191,7 +191,7 @@ function android_build_step()
   assert make_resources_package "打包资源"
   assert build_apk "构建apk"
   assert sign_apk "签名apk"
-  assert verify_apk "校验apk"
+#  assert verify_apk "校验apk"
 }
 
 function assert()
@@ -229,7 +229,7 @@ function assert()
 
 function user_help()
 {
-  echo "support:init,clean,reset,view,create,force,apk,sign,verify,R,H,compile,help"
+  echo "support:init,clean,reset,view,create,force,apk,sign,verify,R,H,compile,remote,help"
 }
 
 function verify_apk()
@@ -343,6 +343,8 @@ function update_native_include()
 {
   okdroid_all_steps=2
   okdroid_current_step=1
+  java_compiler="remote_tool javac"
+  javah="remote_tool javah"
   rm -rf ${android_classes}
   assert compile_java_classes "编译源文件"
   assert update_jni_header "更新jni头文件"
@@ -407,6 +409,7 @@ function compile_java_classes()
   local is=1
   echo "=> start to compile java classes..."
   local javac=$(check_tool "javac" "${java_compiler}" "java compile" "javac")
+  local all=""
   if [ "$javac" != "" ]; then
      local src=$(check_file "${android_java_source}" "java source")
      local resR=$(check_file "${android_resource_R}" "resource R")
@@ -418,7 +421,9 @@ function compile_java_classes()
 	find "$src" -type f -name "*.java" -print > $origin
 	find "$resR" -type f -name "R.java" -print >> $origin
 	find "${android_extra_java_source}" -type f -name "*.java" -print >> $origin
+	all=$(cat $origin)
         handle_source $origin $target $clean $state
+        local all=$(cat $origin)
 	if [ -e "$clean" ]; then
 	   #set -x
 	   local slen=${#android_java_source}
@@ -440,9 +445,10 @@ function compile_java_classes()
 	      local comm="$javac"
 	      echo "$comm" | grep -E "^remote_tool"
 	      if [ $? -ne 0 ]; then
-                 comm+=" -d ${android_classes} ${java_compile_options}  ${list}"
+                 comm+=" -d ${android_classes} ${java_compile_options} ${list}"
 	      else
-                 android_java_source=$list 
+		 rm -rf ${android_classes} 
+                 android_java_source=$all 
 	      fi
 	      if [ "$comm" != "" ]; then
                  echo "$comm" && $comm

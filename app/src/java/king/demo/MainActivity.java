@@ -4,6 +4,7 @@ import android.app.Activity;
 import android.os.Bundle;
 import android.content.Context;
 import android.widget.Button;
+import android.widget.EditText;
 import android.widget.Toast;
 import android.view.View;
 import android.view.View.OnClickListener;
@@ -12,7 +13,7 @@ public class MainActivity extends Activity
 {
     private Context context;
     private Button showBt;
-    private String message;
+    private EditText inputEd;
     @Override
     public void onCreate(Bundle savedInstanceState)
     {
@@ -20,17 +21,18 @@ public class MainActivity extends Activity
         setContentView(R.layout.main);
 	context=this;
 	showBt=(Button)findViewById(R.id.show);
+	inputEd=(EditText)findViewById(R.id.input);
 	showBt.setOnClickListener(new OnClickListener(){
 	      @Override
               public void onClick(View view) {
-		 message=getNativeMessage();
-                 Toast.makeText(context,message,Toast.LENGTH_SHORT).show();
+ 		 String message=Native.exec(" "+inputEd.getText());
+                  Toast.makeText(context,message,Toast.LENGTH_SHORT).show();
               }
 	});
     }
-
     private String getNativeMessage(){
-         String str=Native.sendJavaMessage();
+         //String str=Native.sendJavaMessage();
+	 String str="O_o: Hello World!";
          return str;
     }
 }
