@@ -32,22 +32,26 @@ support_tools=tools
 default_apk_name=signed-debug.apk
 default_sign_jks=${android_debug_jks}
 
-android_jar=$ANDROID_HOME/platforms/android-28/android.jar
+android_jar=./tools/lib/android-28.jar
 jni_list="./jni.list"
 
 java_compile_options="-cp ${android_jar}"
 android_aapt_options="-I ${android_jar}"
 android_sign_options="--ks-pass file:${android_sign}/debug_ks_pass"
 
-android_apk_builder="java -cp $ANDROID_HOME/tools/lib/sdklib-26.0.0-dev.jar com.android.sdklib.build.ApkBuilderMain"
-android_apk_signer=$ANDROID_HOME/build-tools/28.0.3/apksigner
-android_dx=$ANDROID_HOME/build-tools/28.0.3/dx
-
 okdroid=~/.okdroid
 okdroid_project_list=$okdroid/project.list
 okdroid_step_force=0
 okdroid_all_steps=0
 okdroid_current_step=0
+
+#远程处理
+#apkbuilder_input
+#apkbuilder_handle
+#apksigner_input
+#apksigner_handle
+#jni_header_input
+#jni_header_handle
 
 function app()
 {
@@ -70,10 +74,110 @@ function app()
 	 "R") update_resource_R; break;;
 	 "H") update_native_include; break;;
 	 "compile") compile_java_classes; break;;
+	 "remote") auto_remote; break;;
 	 "help") user_help; break;;
       esac
     done
     unset i
+  fi
+}
+
+function auto_remote()
+{
+   java_compiler="remote_tool javac"
+   android_aapt_R="aapt"
+   android_aapt_P="aapt"
+   android_dx="remote_tool dx"
+   android_apk_builder="remote_tool apkbuilder"
+   android_apk_sign="remote_tool apk_sign"
+   android_apk_verify="remote_tool apk_verify"
+   android_build_step
+}
+
+function remote_tool()
+{
+  if [ $# -eq 1 ]; then
+     local tag=$1
+     local remote="upss -dt -dh -r -e ssh"
+     local input=""
+     local handle=""
+     local output=""
+     local build="$(basename $(mktemp -u))"
+     local rpt=.tmp/okdroid/remote
+     local path=/home/test0/ftp/okdroid/remote
+     local ajr=$path/../tool/lib/android.jar
+     local dx=$path/../tool/dx
+     local apb=$path/../tool/apkbuilder
+     local aks=$path/../tool/apksigner
+     case "$tag" in
+	"aapt_r")
+	    input="${android_manifest_xml} ${android_resource}"
+            handle="aapt package -f -m --auto-add-overlay -M ${android_manifest_xml} -S ${android_resource} -J ${build} -I $ajr"
+	    output="${android_resource_R}"
+	;;
+        "aapt_p")
+	    input="${android_manifest_xml} ${android_resource}"
+	    handle="aapt package -f -M ${android_manifest_xml} -S ${android_resource} -F ${build}/$(basename ${android_resource_output}) -I $ajr"
+	    output="$(dirname ${android_resource_output})"
+	;;
+        "javac")
+	    input="${android_java_source}"
+	    handle="javac -d ${build} -cp $ajr ${android_java_source}"
+	    output="${android_classes}"
+	;;
+        "dx")
+	    input="${android_classes}"
+	    handle="$dx --dex --output=${build}/$(basename ${android_dex_output}) ${android_classes}"
+	    output="$(dirname ${android_dex_output})"
+	;;
+        "apkbuilder")
+	    input="${apkbuilder_input}"
+	    handle="$apb ${build}/$(basename ${android_apk_output}) -v -u ${apkbuilder_handle}"
+	    output="$(dirname ${android_apk_output})"
+	;;
+        "apk_sign")
+	    input="${apksigner_input}"
+	    handle="$aks sign --out ${build}/${apk_name} ${apksigner_handle}"
+	    output="${apk_output}"
+	;;
+        "apk_verify")
+	    input="${apksigner_input}"
+	    handle="$aks verify ${apksigner_handle}"
+	    output=""
+	;;
+        "javah")
+	    input="${jni_header_input}"
+            handle="javah -d ${build} ${jni_header_handle}"
+	    output="${android_native_include}"
+	;;
+     esac
+     if [ "$input" != "" ]&&[ "$handle" != "" ]; then
+        local tmp=$(mktemp -u)
+	local wk=$(basename $tmp)
+	tar -czf ${tmp} ${input}	
+	if [ -e "$tmp" ]; then
+	   sf put $rpt/$wk.tgz $tmp
+	   $remote "cd $path;
+	            mkdir -p $wk;
+		    mv $wk.tgz $wk;
+		    cd $wk;
+	            tar -xzf $wk.tgz;
+		    mkdir -p $build;
+		    $handle;
+		    tar -czf $path/$wk.tgz $build;
+		    cd $path;
+                    rm -rf $wk;"
+	   if [ "$output" != "" ]; then
+	      sf get $tmp $rpt/$wk.tgz
+	      mkdir -p ${output}
+              tar -xzf ${tmp}
+	      mv ${build}/* ${output}/
+	      rm -rf $build
+	   fi
+	   rm -rf $tmp
+	   $remote "rm -rf $path/$wk.tgz" 
+	fi
+      fi
   fi
 }
 
@@ -128,14 +232,6 @@ function user_help()
   echo "support:init,clean,reset,view,create,force,apk,sign,verify,R,H,compile,help"
 }
 
-function remote_tool()
-{
-  if [ $# -gt 1 ]; then
-     echo $@
-     return 0
-  fi
-}
-
 function verify_apk()
 {
   echo "=> start to verify apk..."
@@ -153,9 +249,17 @@ function handle_apk()
   local is=1
   if [ $# -eq 1 ]; then
      local intent=$1
-     local apk_signer=$(check_tool "apksigner" "${android_apk_signer}" "android apk signer" "apksigner")
+     local apk_signer=""
+     case "$intent" in
+	"sign")
+	    apk_signer=$(check_tool "apksigner" "${android_apk_sign}" "android apk signer" "apk_sign")
+	;;
+        "verify")
+            apk_signer=$(check_tool "apksigner" "${android_apk_verify}" "android apk signer" "apk_verify")
+	;;
+     esac
      if [ "$apk_signer" != "" ]; then
-	local comm=""
+        local comm="$apk_signer"
         case "$intent" in
 	   "sign")
 	      mkdir -p ${apk_output}
@@ -166,12 +270,24 @@ function handle_apk()
 		     read -p "please input signed apk name:" apk_name
 		     if [ "${apk_name}" != "" ]; then break; fi
 		 done
-	      fi
-              comm="$apk_signer sign -v --ks ${sign_jks} --in ${android_apk_output} --out ${apk_output}/${apk_name} ${android_sign_options}"
+	      fi 
+	      echo "$comm" | grep -E "^remote_tool"
+	      if [ $? -ne 0 ]; then
+                 comm="$apk_signer sign -v --ks ${sign_jks} --in ${android_apk_output} --out ${apk_output}/${apk_name} ${android_sign_options}"
+	     else
+                 apksigner_input="${sign_jks} ${android_apk_output} ${android_sign}/debug_ks_pass"
+		 apksigner_handle=" -v --ks ${sign_jks} --in ${android_apk_output} ${android_sign_options}"
+	     fi
             ;;
 	    "verify")
 	      local apk=$(check_file "${apk_output}/${default_apk_name}" "apk")
-              comm="$apk_signer verify -v $apk"
+              echo "$comm" | grep -E "^remote_tool"
+	      if [ $? -ne 0 ]; then
+                 comm="$apk_signer verify -v $apk"
+	      else
+                 apksigner_input="$apk"
+		 apksigner_handle=" -v $apk"
+	      fi
 	    ;;
 	esac
 	if [ "$comm" != "" ]; then
@@ -193,12 +309,25 @@ function build_apk()
      local pkg=$(check_file "${android_resource_output}" "android resource package")
      if [ "$dex" != "" ]&&[ "$pkg" != "" ]; then
 	mkdir -p $(dirname ${android_apk_output})
-        local comm="$apk_builder ${android_apk_output} -v -u -f ${dex} -z ${pkg}" 
-	if [ -e "${android_native_library}" ]; then
-	   comm+=" -nf ${android_native_library}"
+        local comm="$apk_builder"
+	echo "$comm" | grep -E "^remote_tool"
+	if [ $? -ne 0 ]; then
+           comm+=" ${android_apk_output} -v -u -f ${dex} -z ${pkg}"
+	   if [ -e "${android_native_library}" ]; then
+	       comm+=" -nf ${android_native_library}"
+	   fi
+	else
+	   apkbuilder_input="${dex} ${pkg}"
+	   apkbuilder_handle="-f ${dex} -z ${pkg}"
+	   if [ -e "${android_native_library}" ]; then
+	       apkbuilder_input+=" ${android_native_library}"
+	       apkbuilder_handle+=" -nf ${android_native_library}"
+	   fi
+        fi
+	if [ "$comm" != "" ]; then
+	   echo "$comm" && $comm
+	   is=$?
 	fi
-	echo "$comm" && $comm
-	is=$?
      fi
   fi
   return $is
@@ -230,9 +359,18 @@ function update_jni_header()
      if [ "$classes" != "" ]&&[ "$jni_list" != "" ]; then
 	mkdir -p ${android_native_include}
 	rm -rf ${android_native_include}/*.h
-        local comm="$javah -force -d ${android_native_include} -cp ${classes}:${android_extra_classes} -jni $(cat $jni_list)"
-	echo "$comm" && $comm
-	is=$?
+        local comm="$javah"
+	echo "$comm" | grep -E "^remote_tool"
+	if [ $? -ne 0 ]; then
+           comm+=" -force -d ${android_native_include} -cp ${classes}:${android_extra_classes} -jni $(cat $jni_list)"
+	else
+           jni_header_input="${classes} ${android_extra_classes}"
+	   jni_header_handle="-force -cp ${classes}:${android_extra_classes} -jni $(cat $jni_list)"
+	fi
+	if [ "$comm" != "" ]; then
+	   echo "$comm" && $comm
+	   is=$?
+	fi
      else
 	echo "please checkout requirements for update jni header."
      fi
@@ -248,9 +386,17 @@ function make_classes_dex()
   if [ "$dx" != "" ]; then
      local classes=$(check_file "${android_classes}" "android classes")
      if [ "$classes" != "" ]; then
-        local comm="$dx --dex --output=${android_dex_output} ${classes} ${android_extra_classes}"
-	echo "$comm" && $comm
-	is=$?
+        local comm="$dx"
+	echo "$comm" | grep -E "^remote_tool"
+	if [ $? -ne 0 ]; then
+           comm+=" --dex --output=${android_dex_output} ${classes} ${android_extra_classes}"
+	else
+           android_classes="${classes} ${android_extra_classes}"
+	fi
+	if [ "$comm" != "" ]; then
+	   echo "$comm" && $comm
+	   is=$?
+        fi
      fi
   fi
   return $is
@@ -291,9 +437,17 @@ function compile_java_classes()
                is=0
            fi
 	   if [ "$list" != "" ]; then
-              local comm="$javac -d ${android_classes} ${java_compile_options}  ${list}"
-              echo "$comm" && $comm
-	      is=$?
+	      local comm="$javac"
+	      echo "$comm" | grep -E "^remote_tool"
+	      if [ $? -ne 0 ]; then
+                 comm+=" -d ${android_classes} ${java_compile_options}  ${list}"
+	      else
+                 android_java_source=$list 
+	      fi
+	      if [ "$comm" != "" ]; then
+                 echo "$comm" && $comm
+	         is=$?
+	      fi
 	   #else
 	      #echo "not found any compileble java source files!"
            fi
@@ -321,27 +475,33 @@ function aapt_resource()
      local aapt=""
      case "$intent" in
 	"create_R")
-	    aapt=$(check_tool "aapt" "${android_aapt}" "aapt" "aapt_r")
+	    aapt=$(check_tool "aapt" "${android_aapt_R}" "aapt" "aapt_r")
 	;;
         "make_pkg")
-	    aapt=$(check_tool "aapt" "${android_aapt}" "aapt" "aapt_p")
+	    aapt=$(check_tool "aapt" "${android_aapt_P}" "aapt" "aapt_p")
 	;;
      esac
      if [ "$aapt" != "" ]; then
         local manifest=$(check_file "${android_manifest_xml}" "AndroidManifest.xml")
         local res=$(check_file "${android_resource}" "android resource") 
         if [ "$manifest" != "" ]&&[ "$res" != "" ]; then
-	   local comm=""
-	   case "$intent" in
-	     "create_R")
-                 mkdir -p ${android_resource_R}
-                 comm="$aapt package -f -m --auto-add-overlay -M "${manifest}" -S "${res}" -J "${android_resource_R}" ${android_aapt_options}"
-	     ;;
-             "make_pkg")
-		 mkdir -p $(dirname ${android_resource_output})
-                 comm="$aapt package -f -M "${manifest}" -S "${res}" -F "${android_resource_output}" ${android_aapt_options}"
-	     ;;
-	   esac
+	   local comm="$aapt"
+	   echo "$comm" | grep -E "^remote_tool"
+	   if [ $? -ne 0 ]; then
+	     case "$intent" in
+	        "create_R")
+                    mkdir -p ${android_resource_R}
+                    comm+=" package -f -m --auto-add-overlay -M "${manifest}" -S "${res}" -J "${android_resource_R}" ${android_aapt_options}"
+	        ;;
+                "make_pkg")
+		    mkdir -p $(dirname ${android_resource_output})
+                    comm+=" package -f -M "${manifest}" -S "${res}" -F "${android_resource_output}" ${android_aapt_options}"
+	        ;;
+	      esac
+	   else
+	      android_manifest_xml=${manifest}
+	      android_resource=${res}
+           fi
 	   if [ "$comm" != "" ]; then
 	      echo $comm && $comm
 	      is=$?
