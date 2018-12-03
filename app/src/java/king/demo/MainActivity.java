@@ -26,13 +26,8 @@ public class MainActivity extends Activity
 	      @Override
               public void onClick(View view) {
  		 String message=Native.exec(" "+inputEd.getText());
-                  Toast.makeText(context,message,Toast.LENGTH_SHORT).show();
+                 Toast.makeText(context,message,Toast.LENGTH_SHORT).show();
               }
 	});
-    }
-    private String getNativeMessage(){
-         //String str=Native.sendJavaMessage();
-	 String str="O_o: Hello World!";
-         return str;
     }
 }

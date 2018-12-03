@@ -33,7 +33,8 @@ default_apk_name=signed-debug.apk
 default_sign_jks=${android_debug_jks}
 
 android_jar=$KALI_HOME/opt/android-sdk-linux/platforms/android-28/android.jar
-jni_list="./jni.list"
+android_jar=tools/lib/android-28.jar
+jni_list=./jni.list
 
 java_compile_options="-cp ${android_jar}"
 android_aapt_options="-I ${android_jar}"
@@ -62,19 +63,22 @@ function app()
     for ((i=0;i<$1;i++));do
       #echo "$i:${argv[i]}"
       case "${argv[i]}" in
-	 "init") init_okdroid;;
-	 "clean") clean_project;;
-	 "reset") reset_okdroid;;
-	 "force") okdroid_step_force=1;;
+	 "init") init_okdroid; break;;
 	 "view") view_project; break;;
 	 "create") create_project; break;;
-	 "apk") android_build_step; break;;
-	 "verify") verify_apk; break;;
-	 "sign") sign_apk; break;;
+	 
+	 "reset") reset_okdroid;;
+	 "clean") clean_project;;
+	 "force") okdroid_step_force=1;;
+	 "remote") set_remote_tools;;
+	 
 	 "R") update_resource_R; break;;
 	 "H") update_native_include; break;;
-	 "compile") compile_java_classes; break;;
-	 "remote") auto_remote; break;;
+	 "class") compile_java_classes; break;;
+	 "last") build_apk; sign_apk; break;;
+	 "sign") sign_apk; break;;
+	 "verify") verify_apk; break;;
+	 "apk") android_build_step; break;;
 	 "help") user_help; break;;
       esac
     done
@@ -82,7 +86,12 @@ function app()
   fi
 }
 
-function auto_remote()
+function user_help()
+{
+  echo "support:init,clean,reset,view,create,force,apk,sign,verify,R,H,class,remote,last,help"
+}
+
+function set_remote_tools()
 {
    java_compiler="remote_tool javac"
    android_aapt_R="aapt"
@@ -91,7 +100,6 @@ function auto_remote()
    android_apk_builder="remote_tool apkbuilder"
    android_apk_sign="remote_tool apk_sign"
    android_apk_verify="remote_tool apk_verify"
-   android_build_step
 }
 
 function remote_tool()
@@ -225,11 +233,6 @@ function assert()
   else
     echo "assert needs 2 arguments!"
   fi
-}
-
-function user_help()
-{
-  echo "support:init,clean,reset,view,create,force,apk,sign,verify,R,H,compile,remote,help"
 }
 
 function verify_apk()

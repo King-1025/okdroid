@@ -1,0 +1,6 @@
+build
+native/core/build
+native/include/*
+native/lib/*
+tools/lib/*
+output/*
